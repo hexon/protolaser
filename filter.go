@@ -152,7 +152,13 @@ type filter interface {
 }
 
 func (f MessageFilter) match(_ wireType, pb []byte) error {
-	seen := make([]bool, len(f.filters))
+	var seen []bool
+	if len(f.filters) < 16 {
+		var array [16]bool
+		seen = array[:]
+	} else {
+		seen = make([]bool, len(f.filters))
+	}
 	for len(pb) > 0 {
 		n, sz := binary.Uvarint(pb)
 		if sz <= 0 || n > math.MaxUint32 {
