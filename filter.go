@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+
+	"github.com/dennwc/varint"
 )
 
 var (
@@ -164,13 +166,12 @@ func (f MessageFilter) match(_ wireType, pb []byte) error {
 		seen = make([]bool, len(f.filters))
 	}
 	for len(pb) > 0 {
-		n, sz := binary.Uvarint(pb)
-		if sz <= 0 || n > math.MaxUint32 {
+		field, wireTypeByte, sz := varint.ProtoTag(pb)
+		if sz == 0 || field > math.MaxUint32 {
 			return ErrCorrupted
 		}
 		pb = pb[sz:]
-		wt := wireType(n & 7)
-		field := uint32(n >> 3)
+		wt := wireType(wireTypeByte)
 		var len int32
 		switch wt {
 		case wireVarint:
@@ -194,7 +195,7 @@ func (f MessageFilter) match(_ wireType, pb []byte) error {
 		default:
 			return ErrCorrupted
 		}
-		if idx, ok := f.tagLookup[field]; ok {
+		if idx, ok := f.tagLookup[uint32(field)]; ok {
 			if seen[idx] {
 				return ErrLastWinsUnsupported
 			}
