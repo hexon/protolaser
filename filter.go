@@ -152,6 +152,10 @@ type filter interface {
 }
 
 func (f MessageFilter) match(_ wireType, pb []byte) error {
+	remaining := len(f.filters)
+	if remaining == 0 {
+		return nil
+	}
 	var seen []bool
 	if len(f.filters) < 16 {
 		var array [16]bool
@@ -197,6 +201,10 @@ func (f MessageFilter) match(_ wireType, pb []byte) error {
 			seen[idx] = true
 			if err := f.filters[idx].match(wt, pb[:len]); err != nil {
 				return err
+			}
+			remaining--
+			if remaining == 0 {
+				return nil
 			}
 		}
 		pb = pb[len:]
