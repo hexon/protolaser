@@ -182,7 +182,7 @@ func (f MessageFilter) match(_ wireType, pb []byte) error {
 			len = 8
 		case wireLen:
 			l, sz := binary.Uvarint(pb)
-			if sz <= 0 || n > math.MaxInt32 {
+			if sz <= 0 || l > math.MaxInt32 {
 				return ErrCorrupted
 			}
 			pb = pb[sz:]
