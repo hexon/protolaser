@@ -182,7 +182,7 @@ func (f MessageFilter) match(_ wireType, pb []byte) error {
 		case wireI64:
 			len = 8
 		case wireLen:
-			l, sz := binary.Uvarint(pb)
+			l, sz := varint.Uvarint(pb)
 			if sz <= 0 || l > math.MaxInt32 {
 				return ErrCorrupted
 			}
@@ -275,7 +275,7 @@ func decodeFloat64(wireType wireType, pb []byte) (float64, error) {
 func decodeUnsignedInt(wireType wireType, pb []byte) (uint64, error) {
 	switch wireType {
 	case wireVarint:
-		n, _ := binary.Uvarint(pb)
+		n, _ := varint.Uvarint(pb)
 		return n, nil
 	case wireI32:
 		return uint64(binary.LittleEndian.Uint32(pb)), nil
@@ -304,7 +304,7 @@ func decodeSignedInt(wireType wireType, pb []byte) (int64, error) {
 func decodeInt32(wireType wireType, pb []byte) (int32, error) {
 	switch wireType {
 	case wireVarint:
-		n, _ := binary.Uvarint(pb)
+		n, _ := varint.Uvarint(pb)
 		return int32(uint32(n)), nil
 	case wireI32:
 		return int32(binary.LittleEndian.Uint32(pb)), nil
@@ -318,7 +318,7 @@ func decodeInt32(wireType wireType, pb []byte) (int32, error) {
 func decodeInt64(wireType wireType, pb []byte) (int64, error) {
 	switch wireType {
 	case wireVarint:
-		n, _ := binary.Uvarint(pb)
+		n, _ := varint.Uvarint(pb)
 		return int64(n), nil
 	case wireI32:
 		return int64(int32(binary.LittleEndian.Uint32(pb))), nil
@@ -353,6 +353,6 @@ func (f extractBool) match(wireType wireType, pb []byte) error {
 	if wireType != wireVarint {
 		return errors.New("ExtractBool filter encountered non varint data")
 	}
-	n, _ := binary.Uvarint(pb)
+	n, _ := varint.Uvarint(pb)
 	return f.cb(n != 0)
 }
