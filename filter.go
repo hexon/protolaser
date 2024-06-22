@@ -10,23 +10,13 @@ import (
 	"math"
 
 	"github.com/dennwc/varint"
+	"google.golang.org/protobuf/encoding/protowire"
 )
 
 var (
 	errMismatch            = errors.New("mismatch")
 	ErrCorrupted           = errors.New("protobuf wire data is invalid")
 	ErrLastWinsUnsupported = errors.New("the protobuf contained multiple values for a field but this is not supported by protolaser")
-)
-
-type wireType uint8
-
-const (
-	wireVarint wireType = 0
-	wireI64    wireType = 1
-	wireLen    wireType = 2
-	wireSgroup wireType = 3
-	wireEgroup wireType = 4
-	wireI32    wireType = 5
 )
 
 type missingBehavior uint8
@@ -138,7 +128,7 @@ func (f *MessageFilter) TagExists(tag uint32) {
 }
 
 func (f MessageFilter) Match(pb []byte) (bool, error) {
-	err := f.match(wireLen, pb)
+	err := f.match(protowire.BytesType, pb)
 	switch err {
 	case nil:
 		return true, nil
@@ -150,10 +140,10 @@ func (f MessageFilter) Match(pb []byte) (bool, error) {
 }
 
 type filter interface {
-	match(wireType wireType, pb []byte) error
+	match(wireType protowire.Type, pb []byte) error
 }
 
-func (f MessageFilter) match(_ wireType, pb []byte) error {
+func (f MessageFilter) match(_ protowire.Type, pb []byte) error {
 	remaining := len(f.filters)
 	if remaining == 0 {
 		return nil
@@ -171,26 +161,26 @@ func (f MessageFilter) match(_ wireType, pb []byte) error {
 			return ErrCorrupted
 		}
 		pb = pb[sz:]
-		wt := wireType(wireTypeByte)
+		wt := protowire.Type(wireTypeByte)
 		var len int32
 		switch wt {
-		case wireVarint:
+		case protowire.VarintType:
 			for pb[len]&128 == 128 {
 				len++
 			}
 			len++
-		case wireI64:
+		case protowire.Fixed64Type:
 			len = 8
-		case wireLen:
+		case protowire.BytesType:
 			l, sz := varint.Uvarint(pb)
 			if sz <= 0 || l > math.MaxInt32 {
 				return ErrCorrupted
 			}
 			pb = pb[sz:]
 			len = int32(l)
-		case wireSgroup, wireEgroup:
+		case protowire.StartGroupType, protowire.EndGroupType:
 			len = 0
-		case wireI32:
+		case protowire.Fixed32Type:
 			len = 4
 		default:
 			return ErrCorrupted
@@ -217,7 +207,7 @@ func (f MessageFilter) match(_ wireType, pb []byte) error {
 				return errMismatch
 			case missingIsMatch:
 			case descendIfMissing:
-				if err := f.filters[i].match(wireLen, nil); err != nil {
+				if err := f.filters[i].match(protowire.BytesType, nil); err != nil {
 					return err
 				}
 			}
@@ -230,7 +220,7 @@ type equalBytes struct {
 	eq []byte
 }
 
-func (f equalBytes) match(wireType wireType, pb []byte) error {
+func (f equalBytes) match(wireType protowire.Type, pb []byte) error {
 	if !bytes.Equal(pb, f.eq) {
 		return errMismatch
 	}
@@ -241,7 +231,7 @@ type bytesIn struct {
 	eq [][]byte
 }
 
-func (f bytesIn) match(wireType wireType, pb []byte) error {
+func (f bytesIn) match(wireType protowire.Type, pb []byte) error {
 	for _, eq := range f.eq {
 		if bytes.Equal(pb, eq) {
 			return nil
@@ -254,75 +244,75 @@ type tagExists struct {
 	eq []byte
 }
 
-func (f tagExists) match(wireType wireType, pb []byte) error {
+func (f tagExists) match(wireType protowire.Type, pb []byte) error {
 	return nil
 }
 
-func decodeFloat32(wireType wireType, pb []byte) (float32, error) {
-	if wireType != wireI32 {
+func decodeFloat32(wireType protowire.Type, pb []byte) (float32, error) {
+	if wireType != protowire.Fixed32Type {
 		return 0, errors.New("EqualFloat32 filter encountered non float32 data")
 	}
 	return math.Float32frombits(binary.LittleEndian.Uint32(pb)), nil
 }
 
-func decodeFloat64(wireType wireType, pb []byte) (float64, error) {
-	if wireType != wireI64 {
+func decodeFloat64(wireType protowire.Type, pb []byte) (float64, error) {
+	if wireType != protowire.Fixed64Type {
 		return 0, errors.New("EqualFloat64 filter encountered non float64 data")
 	}
 	return math.Float64frombits(binary.LittleEndian.Uint64(pb)), nil
 }
 
-func decodeUnsignedInt(wireType wireType, pb []byte) (uint64, error) {
+func decodeUnsignedInt(wireType protowire.Type, pb []byte) (uint64, error) {
 	switch wireType {
-	case wireVarint:
+	case protowire.VarintType:
 		n, _ := varint.Uvarint(pb)
 		return n, nil
-	case wireI32:
+	case protowire.Fixed32Type:
 		return uint64(binary.LittleEndian.Uint32(pb)), nil
-	case wireI64:
+	case protowire.Fixed64Type:
 		return binary.LittleEndian.Uint64(pb), nil
 	default:
 		return 0, errors.New("numeric filter encountered non numeric data")
 	}
 }
 
-func decodeSignedInt(wireType wireType, pb []byte) (int64, error) {
+func decodeSignedInt(wireType protowire.Type, pb []byte) (int64, error) {
 	switch wireType {
-	case wireVarint:
+	case protowire.VarintType:
 		// Uses ZigZag encoding.
 		n, _ := binary.Varint(pb)
 		return n, nil
-	case wireI32:
+	case protowire.Fixed32Type:
 		return int64(int32(binary.LittleEndian.Uint32(pb))), nil
-	case wireI64:
+	case protowire.Fixed64Type:
 		return int64(binary.LittleEndian.Uint64(pb)), nil
 	default:
 		return 0, errors.New("numeric filter encountered non numeric data")
 	}
 }
 
-func decodeInt32(wireType wireType, pb []byte) (int32, error) {
+func decodeInt32(wireType protowire.Type, pb []byte) (int32, error) {
 	switch wireType {
-	case wireVarint:
+	case protowire.VarintType:
 		n, _ := varint.Uvarint(pb)
 		return int32(uint32(n)), nil
-	case wireI32:
+	case protowire.Fixed32Type:
 		return int32(binary.LittleEndian.Uint32(pb)), nil
-	case wireI64:
+	case protowire.Fixed64Type:
 		return int32(binary.LittleEndian.Uint64(pb)), nil
 	default:
 		return 0, errors.New("numeric filter encountered non numeric data")
 	}
 }
 
-func decodeInt64(wireType wireType, pb []byte) (int64, error) {
+func decodeInt64(wireType protowire.Type, pb []byte) (int64, error) {
 	switch wireType {
-	case wireVarint:
+	case protowire.VarintType:
 		n, _ := varint.Uvarint(pb)
 		return int64(n), nil
-	case wireI32:
+	case protowire.Fixed32Type:
 		return int64(int32(binary.LittleEndian.Uint32(pb))), nil
-	case wireI64:
+	case protowire.Fixed64Type:
 		return int64(binary.LittleEndian.Uint64(pb)), nil
 	default:
 		return 0, errors.New("numeric filter encountered non numeric data")
@@ -333,7 +323,7 @@ type extractBytes struct {
 	cb func([]byte) error
 }
 
-func (f extractBytes) match(wireType wireType, pb []byte) error {
+func (f extractBytes) match(wireType protowire.Type, pb []byte) error {
 	return f.cb(pb)
 }
 
@@ -341,7 +331,7 @@ type extractString struct {
 	cb func(string) error
 }
 
-func (f extractString) match(wireType wireType, pb []byte) error {
+func (f extractString) match(wireType protowire.Type, pb []byte) error {
 	return f.cb(string(pb))
 }
 
@@ -349,8 +339,8 @@ type extractBool struct {
 	cb func(bool) error
 }
 
-func (f extractBool) match(wireType wireType, pb []byte) error {
-	if wireType != wireVarint {
+func (f extractBool) match(wireType protowire.Type, pb []byte) error {
+	if wireType != protowire.VarintType {
 		return errors.New("ExtractBool filter encountered non varint data")
 	}
 	n, _ := varint.Uvarint(pb)
