@@ -156,12 +156,11 @@ func (f MessageFilter) match(_ protowire.Type, pb []byte) error {
 		seen = make([]bool, len(f.filters))
 	}
 	for len(pb) > 0 {
-		field, wireTypeByte, sz := varint.ProtoTag(pb)
-		if sz == 0 || field > math.MaxUint32 {
+		field, wt, sz := protowire.ConsumeTag(pb)
+		if sz <= 0 {
 			return ErrCorrupted
 		}
 		pb = pb[sz:]
-		wt := protowire.Type(wireTypeByte)
 		var len int32
 		switch wt {
 		case protowire.VarintType:
