@@ -278,9 +278,8 @@ func decodeUnsignedInt(wireType protowire.Type, pb []byte) (uint64, error) {
 func decodeSignedInt(wireType protowire.Type, pb []byte) (int64, error) {
 	switch wireType {
 	case protowire.VarintType:
-		// Uses ZigZag encoding.
-		n, _ := binary.Varint(pb)
-		return n, nil
+		u, _ := binary.Uvarint(pb)
+		return protowire.DecodeZigZag(u), nil
 	case protowire.Fixed32Type:
 		return int64(int32(binary.LittleEndian.Uint32(pb))), nil
 	case protowire.Fixed64Type:
